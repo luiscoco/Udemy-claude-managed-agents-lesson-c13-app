@@ -42,28 +42,90 @@ CLAUDE_MANAGED_ENVIRONMENT_ID=your_environment_id
 PORT=3013
 ```
 
-## How the application was developed
+## How the app was build
 
-The browser collects inputs; the Node host validates requests; the lesson implementation produces observable evidence. The architecture page walks through the real source with numbered steps, prerequisite configuration, source filenames and code excerpts.
+### 1. Select an explicit parent-history boundary
 
-### Lesson implementation
+The seeded parent events have stable IDs. An unknown boundary is rejected rather than silently selecting the latest history.
 
-[src/lesson.ts](https://github.com/luiscoco/Udemy-claude-managed-agents-lesson-c13-app/blob/main/src/lesson.ts)
+Source: [src/lesson.ts](src/lesson.ts#L13) · selected statements
 
 ```typescript
-  async run(input) {
+const history = [
+  { id: "e1", text: "Project Aurora" },
+  { id: "e2", text: "Approved scope" },
+  { id: "e3", text: "Later proposal" },
+];
 
-const history=[{id:"e1",text:"Project Aurora"},{id:"e2",text:"Approved scope"},{id:"e3",text:"Later proposal"}];
-const at=history.findIndex(e=>e.id===text(input,"boundary"));
-if(at<0)return report("rejected","Boundary not found; no branch planned",{},["Read canonical parent history","Find the explicit boundary"]);
-const selected=history.slice(0,at+1), saved=text(input,"savedText"), current=text(input,"currentText");
-return report("passed","Prepared reviewed context and a hash-bound restore plan",{selectedEvents:selected.length,branchContext:selected.map(e=>e.text).join("\n"),snapshot:{savedHash:hash(saved),currentHash:hash(current),needsRestore:saved!==current},parentMutated:false},["Stop history at the selected event","Review the transferred summary","Compare bytes before planning restoration","Preserve the parent conversation"]);
+const at = history.findIndex((e) => e.id === text(input, "boundary"));
 
-  }
-};
+if (at < 0)
+  return report("rejected", "Boundary not found; no branch planned", {}, [
+    "Read canonical parent history",
+    "Find the explicit boundary",
+  ]);
 ```
 
-Read the architecture page for the remaining source excerpts and explanations, including input handling and optional provider behavior. The diagram describes this application, rather than implying that an external integration has been implemented.
+### 2. Transfer only reviewed context
+
+slice includes the selected boundary and excludes later proposals. Saved and current file text are read separately for the snapshot comparison.
+
+Source: [src/lesson.ts](src/lesson.ts#L16)
+
+```typescript
+const selected = history.slice(0, at + 1),
+  saved = text(input, "savedText"),
+  current = text(input, "currentText");
+```
+
+### 3. Bind a restore plan to actual text
+
+The output contains the transferred context, both content hashes and needsRestore. parentMutated stays false: the sample prepares a branch/restore plan without changing the parent or writing a file.
+
+Source: [src/lesson.ts](src/lesson.ts#L17)
+
+```typescript
+return report(
+  "passed",
+  "Prepared reviewed context and a hash-bound restore plan",
+  {
+    selectedEvents: selected.length,
+    branchContext: selected.map((e) => e.text).join("\n"),
+    snapshot: {
+      savedHash: hash(saved),
+      currentHash: hash(current),
+      needsRestore: saved !== current,
+    },
+    parentMutated: false,
+  },
+  [
+    "Stop history at the selected event",
+    "Review the transferred summary",
+    "Compare bytes before planning restoration",
+    "Preserve the parent conversation",
+  ],
+);
+```
+
+### Check your understanding
+
+Run **Branch at a valid boundary** in the application. Compare the result with these scenario expectations:
+
+```json
+{
+  "input": {
+    "boundary": "e2",
+    "currentText": "new draft",
+    "savedText": "reviewed draft"
+  },
+  "expectedOutcome": "passed",
+  "checkEvidence": {
+    "selectedEvents": 2
+  }
+}
+```
+
+Then try **Reject a missing boundary**. Its expected outcome is `rejected`; identify the condition or evidence field that explains the difference.
 
 ## Validation
 
