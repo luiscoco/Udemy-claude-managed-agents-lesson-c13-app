@@ -1,0 +1,55 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { createHash } from "node:crypto";
+import type { BetaManagedAgentsSessionEvent as PersistedEvent } from "@anthropic-ai/sdk/resources/beta/sessions/events";
+
+// Teaching helpers: no top-level requests and no filesystem mutations.
+export async function selectBoundary(client: Anthropic, parentId: string, boundaryId: string) {
+  const selected: PersistedEvent[] = [];
+  for await (const event of client.beta.sessions.events.list(parentId, { order: "asc" }, { maxRetries: 2, timeout: 10000 })) {
+    selected.push(event);
+    if (event.id === boundaryId) return selected;
+  }
+  throw new Error("Boundary not found; no child created");
+}
+export function selectedText(events: PersistedEvent[]) {
+  return events.flatMap(event => event.type === "user.message" || event.type === "agent.message"
+    ? event.content.flatMap(block => block.type === "text" ? [block.text] : []) : []).join("\n\n");
+}
+// Caller checks ownership, defines thread scope and reviews the summary first.
+export async function createBranch<T>(client: Anthropic, options: {
+  parentId: string; boundaryId: string; agentId: string; version: number;
+  environmentId: string; review: (text: string) => Promise<string>;
+  openStream: (id: string) => Promise<T>;
+}) {
+  const { parentId, boundaryId, agentId, version, environmentId, review, openStream } = options;
+  const selected = await selectBoundary(client, parentId, boundaryId);
+  const reviewedSummary = await review(selectedText(selected));
+  if (!reviewedSummary.trim()) throw new Error("Reviewed summary is empty");
+  const child = await client.beta.sessions.create({
+    agent: { type: "agent", id: agentId, version }, environment_id: environmentId,
+    metadata: { parent_session: parentId, boundary_event: boundaryId }
+  }, { maxRetries: 0, timeout: 10000 });
+  try {
+    const stream = await openStream(child.id);
+    await client.beta.sessions.events.send(child.id, { events: [{ type: "user.message",
+      content: [{ type: "text", text: reviewedSummary }] }] }, { maxRetries: 0, timeout: 10000 });
+    return { sessionId: child.id, stream };
+  } catch (cause) {
+    throw Object.assign(new Error("Child exists; reconcile opening or send failure", { cause }), { sessionId: child.id });
+  }
+}
+export function makeSerializedMirror(durableAppend: (event: PersistedEvent) => Promise<void>, persistedIds: string[] = []) {
+  const seen = new Set(persistedIds);
+  return async (event: PersistedEvent) => {
+    if (seen.has(event.id)) return;
+    await durableAppend(event);
+    seen.add(event.id);
+  };
+}
+export const sha256 = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
+export function snapshotPlan(saved: Readonly<Record<string, string>>, current: Readonly<Record<string, string>>) {
+  // Pure plan only: caller validates safe paths, confirmation and current hashes before any restore.
+  return Object.entries(saved).filter(([path, content]) => current[path] !== content)
+    .map(([path, content]) => ({ path, savedContent: content, savedSha256: sha256(content),
+      currentSha256: current[path] === undefined ? null : sha256(current[path]) }));
+}

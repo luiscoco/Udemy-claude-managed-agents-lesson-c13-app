@@ -1,0 +1,29 @@
+{
+  "source": "live-provider-commentary",
+  "sessionId": "sesn_01YJocn9zcdCdEn5bup1mwjz",
+  "answer": "This local experiment demonstrates a workflow involving **inventory, branches, snapshots, and mirrors** by selecting key events, reviewing their summarized context, and comparing hash values to determine whether a restore is needed. The evidence shows two selected events under a \"Project Aurora\" branch, where the saved and current hashes differ, flagging the snapshot as requiring restoration. The steps preserve the parent conversation while guiding a hash-bound restore plan.",
+  "stopReason": "end_turn",
+  "eventTypes": [
+    "session.status_running",
+    "session.thread_status_running",
+    "user.message",
+    "span.model_request_start",
+    "agent.thinking",
+    "agent.message",
+    "span.model_request_end",
+    "session.thread_status_idle",
+    "session.usage",
+    "session.status_idle"
+  ],
+  "requestUsage": [
+    {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 689,
+      "output_tokens": 122,
+      "speed": "standard"
+    }
+  ],
+  "experimentHash": "f1da3d1e7628a2d403b923465292ee51ca867561359a3915a7d62a3c62450aa3",
+  "scope": "A real text-only model response about the local experiment. External integrations and the experiment's correctness are not certified by this response."
+}
